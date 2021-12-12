@@ -1905,312 +1905,267 @@ export default thunk;
 
 <section data-markdown><script type="text/template">
 
-## 2.8. Inside Provider
+## 2.8. Хуки и Redux Toolkit
 
 ***
 
-### Нюансы передачи через Context
-
-1. Компонент-провайдер должен **подписаться** на store,
-   чтобы уведомлять консьюмеров
-2. Писать каждый раз логику Wrapper неудобно,
-   нужен **High Order Component**
-3. Оборачиваемый компонент не зависит от всего состояния,
-   значит надо **передавать только нужные части состояния**
-4. Компонент-провайдер следит за всеми изменениями store,
-   но оборачиваемые компоненты должны обновляться только
-   **при изменениях используемых частей состояния**
-
-_ Как это все-таки работает? _
-_ Это точно работает быстро? _
+### Reaсt-Redux hooks API
 
 ***
 
-### Простой Provider
+> Хуки — нововведение в React 16.8, которое позволяет использовать состояние и другие возможности React без написания классов.*
+
+\* https://ru.reactjs.org/docs/hooks-intro.html
+
+***
+
+### Provider
+
+Как и в случае с `connect()`, необходимо обернуть приложение в компонент `<Provider>`
 
 ```js
-// Чистый React Context
-function App({store}) {
-  return (
-    <Context.Provider value={store}>
-      <RootComponent />
-    </Context.Provider>
-  );
-}
-// Как нам хотелось
-function App({store}) {
-  return (
-    <Provider store={store}>
-      <RootComponent />
-    </Provider>
-  );
-}
-```
+const store = createStore(rootReducer)
 
-Синтаксически подходит!
-Но вспомним про необходимость подписки и сделаем обертку
-
-***
-
-### Подписка на обновление в Provider
-
-```js
-class Provider extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { storeState: props.store.getState(), store: props.store };
-  } // storeState нужен, чтобы обновлять контекст при изменениях
-  componentDidMount() {
-    this.props.store.subscribe(() => {
-      const storeState = this.props.store.getState();
-      this.setState(state =>
-	    state.storeState !== storeState ? storeState : null);
-    });
-  } // любое изменение store.getState() приводит к изменению state и контекста
-  render() {
-    return <Context.Provider value={this.state}>
-             {this.props.children}</Context.Provider>;
-  } // далее другие методы класса
+ReactDOM.render(
+  <Provider store={store}>
+    <App />
+  </Provider>,
+  document.getElementById('root')
+)
 ```
 
 ***
 
-### Желаемое использование HOC
+### useSelector()
 
 ```js
-// Настройка связи со store
-const withStore = connect(
-  (state, props) => ({
-    seconds: state.seconds
-  }),
-  (dispatch, props) => ({
-    onChange: value => dispatch(changeSeconds(value))
-  })
+const result: any = useSelector(selector: Function, equalityFn?: Function)
+```
+
+Позволяет извлекать данные из store Redux с помощью функции `selector`.
+
+Здесь `equalityFn` - функция сравнения предыдущего результата функции `selector` и текущего занчения. По умолчанию `useSelector()` использует строгую форму сравнения `===`.
+
+***
+
+### Пример с useSelector()
+
+```js
+function App() {
+  const seconds = useSelector((state) => state.seconds);
+
+  return <div className="app">
+    <Timer
+      seconds={seconds}
+    />
+  </div>;
+}
+
+ReactDom.render(<Provider store={appStore}>
+  <App />
+</Provider>, document.getElementById('app'));
+```
+
+***
+
+### useDispatch()
+
+```js
+const dispatch = useDispatch();
+```
+
+Этот хук возвращает ссылку на функцию `dispatch` из `store` Redux.
+
+***
+
+### Пример с useDispatch()
+
+```js
+function App() {
+  const seconds = useSelector((state) => state.seconds);
+  const dispatch = useDispatch();
+
+  const handleDecrease = () => dispatch(changeSeconds(-1));
+  const handleIncrease = () => dispatch(changeSeconds(1));
+
+  return <div className="app">
+    <Timer
+      seconds={seconds}
+      onDecrease={handleDecrease}
+      onIncrease={handleIncrease}
+    />
+  </div>;
+}
+```
+
+***
+
+### useStore()
+
+```js
+const store = useStore()
+```
+
+Этот хук возвращает ссылку на store Redux, который был передан компоненту `<Provider>`.
+
+***
+
+### Redux Toolkit
+
+***
+
+Redux Toolkit это набор инструментов, который был создан, чтобы упростить написание кода на Redux.
+
+> Redux Toolkit is our official recommended approach for writing Redux logic. It wraps around the Redux core, and contains packages and functions that we think are essential for building a Redux app.*
+
+\* https://redux.js.org/introduction/getting-started
+
+***
+
+### Мотивация создания Redux Toolkit
+
+Три самые распространенные проблемы с Redux по мнению пользователей:
+
+* Сложно конфигурировать хранилище Redux&#129327;
+* Мне нужно добавить много пакетов, чтобы Redux сделал что-нибудь полезное&#128545;
+* Redux требует слишком много boilerplate кода!
+
+***
+
+### Создание store
+
+```js
+import { combineReducers } from 'redux'
+...
+export const rootReducer = combineReducers({
+  page: pageReducer,
+  products: productsReducer,
+  chosenProducts: chosenProductsReducer,
+});
+```
+
+```js
+import { rootReducer } from './reducers';
+...
+const store = createStore(
+  rootReducer,
+  applyMiddleware(thunk.withExtraArgument(api), customMiddleWare, logger)
 );
-
-// Создание компонента
-const ConnectedTimer = withStore(Timer);
-```
-`connect` — это High Order Function,
-порождающая High Order Component
-
-***
-
-### Простой connect
-
-```js
-function connect(selectProps) {
-  return function wrapWithConnect(WrappedComponent) {
-    class Connect extends Component {
-      renderWrappedComponent = contextValue => {
-        const { storeState, store } = contextValue;	  
-        const derivedProps = selectProps(storeState, this.props, store);
-        return <WrappedComponent {...derivedProps} />;
-      };
-      render() {
-        return <Context.Consumer>
-          {this.renderWrappedComponent}</Context.Consumer>;
-      }
-    }
-    return Connect;
-  }
-}
 ```
 
 ***
 
-### Вопрос ребром
-
-Как часто будет происходить рендеринг
-WrappedComponent при простой реализации?
-
-***
-
-### Пример
-
-<img width="600px" src="assets/set1.png">
-
-***
-
-### Обработка setState
-
-<img width="600px" src="assets/set2.png">
-
-***
-
-### Обработка setState
-
-<img width="600px" src="assets/set3.png">
-
-***
-
-### Защита благодаря PureComponent
-
-<img width="600px" src="assets/set4.png">
-
-***
-
-### Обработка action
-
-<img width="600px" src="assets/context1.png">
-
-***
-
-### Обработка action
-
-<img width="600px" src="assets/context2.png">
-
-***
-
-### Защита благодаря selectProps
-
-<img width="600px" src="assets/context3.png">
-
-***
-
-### Защита благодаря PureComponent
+### Использование configureStore()
 
 ```js
-function connect(selectProps) {
-  return function wrapWithConnect(WrappedComponent) {
-    class Connect extends PureComponent {
-      renderWrappedComponent = contextValue => {
-        const { storeState, store } = contextValue;	  
-        const derivedProps = selectProps(storeState, this.props, store);
-        return <WrappedComponent {...derivedProps} />;
-      };
-      render() {
-        return <Context.Consumer>
-          {this.renderWrappedComponent}</Context.Consumer>;
-      }
-    }
-    return Connect;
-  }
-}
+import { configureStore } from '@reduxjs/toolkit'
+...
+const store = configureStore({
+  reducer: {
+    page: pageReducer,
+    products: productsReducer,
+    chosenProducts: chosenProductsReducer,
+  },
+  middleware: (getDefaultMiddleware) => [
+    ...getDefaultMiddleware({ thunk: { extraArgument: api } }),
+    customMiddleWare,
+    logger
+  ]
+});
 ```
 
+Функция `configureStore()` предоставляет упрощенные параметры конфигурации и набор значений по умолчанию.
+
 ***
 
-### Защита благодаря selectProps
+### Слайсы
+
+Будем называть *слайсом* часть состояния, которая является значением этого состояния для некоторого ключа
 
 ```js
-renderWrappedComponent = value => {
-  const { storeState, store } = value;
-  // selectProps пусть выбирает нужное из store, сохраняя результат
-  const derivedProps = selectProps(storeState, this.props, store);
-  return <WrappedComponent {...derivedProps} />;
+const state = {
+  page: 'menu',
+  products: [{ id: 1, name: 'Блюдо' }]
 };
 ```
-При каждом обновлении `store`
-вызывается `renderWrappedComponent`
 
-Если `selectProps` будет запоминать значения `derivedProps`
-и создавать новый объект `derivedProps` только при изменениях,
-которые могут повлиять на `WrappedComponent`,
-лишних перерисовок `WrappedComponent` не будет,
-даже если `WrappedComponent` не pure
-
-Так и сделано!
+В примере `page` — это один слайс, а `products` — это другой слайс
 
 ***
 
-### Необходимое условие для selectProps
+### Slice-редьюсер
 
-`selectProps` будет работать корректно
-только при использовании immutable-обновлений
-
-***
-
-### connect()
-
-```js
-function connect(mapStateToProps, mapDispatchToProps, mergeProps) {
-  return function wrapWithConnect(WrappedComponent) {
-    function makeDerivedPropsSelector() {
-      return function selectDerivedProps(state, props, store) {
-        // создается на основе mapStateToProps, mapDispatchToProps, mergeProps
+```
+const timerReducer = (state = { seconds: 15 }, action) => {
+  switch (action.type) {
+    case CHANGE_SECONDS:
+      return {
+        seconds: Math.max(Math.min(state.seconds + action.value, 15), 0)
       };
-    }
-    class Connect extends PureComponent {
-      constructor(props) {
-        super(props);
-        this.selectProps = makeDerivedPropsSelector();
-      } /* ... */
-    }
-    return Connect;
-  };
-}
+    case RESTART:
+      return { seconds: 15 };
+    default:
+      return state;
+  }
+};
 ```
 
 ***
 
-### pure в connect()
+### createSlice()
+
+Функция `createSlice()` объединяет в себе функционал `createAction` и `createReducer` и принимает объект с тремя основными полями:
+
+1. `name`: строка, которая будет использоваться в качестве префикса при генерации типов действий.
+2. `initialState`: начальное состояние редьюсера.
+3. `reducers`: объект ключ/значение, в котором ключ - некоторая строка, а значение - кейс-функции (кейс-редьюсера), которые обрабатывают определенные действия.
+
+***
+
+### Пример использования createSlice()
 
 ```js
-function connect(mapStateToProps, mapDispatchToProps, mergeProps,
-  { pure = true, ...extraOptions } = {} // параметров даже больше
-) {
-  return function wrapWithConnect(WrappedComponent) {
-    function makeDerivedPropsSelector() {
-	  // зависит от pure
-      return function selectDerivedProps(state, props, store) {/* ... */}
-    }
-    class Connect extends (pure ? PureComponent : Component) {
-      /* ... */
-    }
-    return Connect;
+const initialState = { seconds: 15 };
+const timerSlice = createSlice({
+  name: 'timer',
+  initialState,
+  reducers: {
+    changeSeconds(state, action) {
+      state.seconds = Math.max(Math.min(state.seconds + action.value, 15), 0);
+    },
+    restart(state) {
+      state.seconds = initialState.seconds;
+    },
+  },
+})
+
+export const {restart, changeSeconds} = timerSlice.actions;
+export const timerReducer = timerSlice.reducer;
+```
+
+***
+
+### Иммутабельные обновления с Immer
+
+`createSlice` использует библиотеку [Immer](https://duckduckgo.com) для иммутабельных обновлений state. Immer отслеживает все изменения, которые которые вносятся в state, затем использует этот список изменений для возврата обновленного значения.
+
+Т.е. вместо:
+
+```js
+function handleChangeSeconds() {
+  return {
+    seconds: Math.max(Math.min(state.seconds + action.value, 15), 0);
   };
 }
 ```
 
-По умолчанию задана опция `pure`, а значит HOC будет создавать `PureComponent`, но этом можно изменить
-
-***
-
-### statics в connect()
+Можно написать такой код:
 
 ```js
-function connect(mapStateToProps, mapDispatchToProps, mergeProps,
-  { pure = true, ...extraOptions } = {}
-) {
-  return function wrapWithConnect(WrappedComponent) {
-    function makeDerivedPropsSelector() {
-	  /* ... */
-    }
-    class Connect extends (pure ? PureComponent : Component) {
-      /* ... */
-    }
-	// статические поля и функции из исходного компонента копируются в обертку
-    return hoistNonReactStatics(Connect, WrappedComponent);
-  };
+function handleChangeSeconds(state, action) {
+  state.seconds = Math.max(Math.min(state.seconds + action.value, 15), 0);
 }
 ```
-Копирование статических полей позволяет использовать
-результат `connect()` как исходный компонент
-
-***
-
-### Все параметры connect()
-
-```js
-connect(
-  (state, props) => ({
-    seconds: state.seconds
-  }),
-  (dispatch, props) => ({
-    onChange: value => dispatch(changeSeconds(value))
-  }),
-  (stateProps, dispatchProps, ownProps) ({
-    ...ownProps, ...stateProps, ...dispatchProps
-  })
-)(Timer);
-```
-
-Обычно задаются `mapStateToProps`, `mapDispatchToProps`
-
-`mergeProps` по умолчанию действует так:
-`{ ...ownProps, ...stateProps, ...dispatchProps }`
-и обычно не переопределяется
 
 ***
 
@@ -2218,34 +2173,11 @@ connect(
 
 ***
 
-### Вопросы
-1. С чего начали делать задачу? Что делали потом?
-2. Как боролись с immutable-обновлениями?
-3. Какие еще были сложности?
+### Вывод
 
-***
-
-### Когда создавать контейнеры?
-
-**Не следует делать из всех компонентов контейнеры!**
-
-Часто достаточно создать **один контейнер на страницу**,
-а дальше передавать данные и обработчики через props.
-
-Также надо создавать контейнеры **для общих блоков**,
-вроде меню или чата.
-
-Например, для «страницы» `Cart` стоит создать контейнер,
-а для «элемента на странице» `Purchase` — нет.
-
-С другой стороны для `Product` на «странице» `Menu` ранее был
-создан контейнер и при добавлении корзины его удобно использовать.
-
-Поэтому полезно делать контейнеры для **компонентов,
-активно взаимодействующих с другими частями приложения**.
+Использование хуков и инструментов из Redux Toolkit позволяет уменьшить количество шаблонного кода в проекте.
 
 </script></section>
-
 
 <!-- ************************************************* -->
 
