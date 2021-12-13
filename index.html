@@ -2240,14 +2240,64 @@ function crossSliceReducer(state, action) {
 
 ***
 
+### Redux Toolkit
+
+***
+
+### Проблема
+
+Мы используем `configureStore()`. Он не предусматривает `crossSliceReducer`.
+
+```
+const store = configureStore({
+  reducer: {
+    page: pageReducer,
+    products: productsReducer,
+    chosenProducts: chosenProductsReducer,
+    purchases: purchasesReducer,
+  },
+});
+```
+
+***
+
+### Передача данных между двумя редьюсерами
+
+> * If a reducer needs to know data from another slice of state, the state tree shape may need to be reorganized so that a single reducer is handling more of the data.
+> * You may need to write some custom functions for handling some of these actions. This may require replacing combineReducers with your own top-level reducer function. <...>.
+> * Middleware with async logic such as redux-thunk have access to the entire state through getState(). An action creator can retrieve additional data from the state and put it in an action, so that each reducer has enough information to update its own state slice.
+
+\* https://redux.js.org/faq/reducers#how-do-i-share-state-between-two-reducers-do-i-have-to-use-combinereducers
+
+***
+
+### Возможное решение
+
+Используем `createAsyncThunk()` из Redux Toolkit. 
+
+```
+const crossSliceAction = createAsyncThunk(
+  'crossSliceAction',
+  (_, thunkAPI) => {
+    const {getState, dispatch} = thunkAPI;
+    const state = getState();
+    
+    dispatch(someSpecialAction(state));
+  }
+)
+...
+dispatch(crossSliceAction());
+```
+
+***
+
 ### Задание 2.9. Orders
 
 ***
 
 ### Выводы
 
-Редьюсер не обязательно декомпозируется по слайсам.
-Он может декомпозироваться по шагам.
+Redux Thunk можно использовать для передачи данных между слайсами.
 
 </script></section>
 
